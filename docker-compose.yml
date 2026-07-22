@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  capsolver:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - OXYBLINK_API=http://oxyblink:3030
+      - OXYBLINK_KEY=${OXYBLINK_KEY:-00e260099385dddd9cf0b1818959c667342e15325bdf2b9994eea71c61531605}
+    restart: unless-stopped
+
+  # Optional: if running oxyblink locally via docker
+  # oxyblink:
+  #   image: oxyblink:latest
+  #   ports:
+  #     - "3030:3030"

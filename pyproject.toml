@@ -1,0 +1,27 @@
+[project]
+name = "capsolver"
+version = "0.3.1"
+description = "self-hosted capsolver microservice v0.3.1 - Aliyun INPAINTING/SLIDER/ICON + RECAPTCHA_V2/V3/HCAPTCHA/TURNSTILE 18 types 100% pure OpenCV DNN no external API"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pillow>=10.0.0",
+    "numpy>=1.26.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "opencv-python-headless>=4.9.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+ml = [
+    "torch>=2.0.0",
+    "transformers>=4.40.0",
+]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
