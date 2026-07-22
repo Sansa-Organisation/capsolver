@@ -364,7 +364,7 @@ def _solve_images_all_types(
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "service": "capsolver", "version": "0.3.4", "supported_types": SUPPORTED_TYPES}
+    return {"status": "ok", "service": "capsolver", "version": "0.3.5", "supported_types": SUPPORTED_TYPES}
 
 
 @router.get("/types", response_model=TypesResponse)
@@ -503,7 +503,7 @@ async def solve_upload(
 async def solver_info():
     """Explain all captcha types and solver strategies v0.3.0."""
     return {
-        "version": "0.3.4",
+        "version": "0.3.5",
         "supported_types": SUPPORTED_TYPES,
         "aliases": TYPE_ALIASES,
         "captcha_types": {
@@ -647,7 +647,7 @@ async def solver_info():
         "slider_mapping": "Non-linear: puzzle_left = 0.00355*slider^2 + 0.077*slider -0.0039, inverted via quadratic",
         "drag_fix": "Root cause F015 was isTrusted=false from JS MouseEvent dispatch. Fixed with trusted CDP Input.dispatchMouseEvent via OxyBlink drag endpoint (mousePressed, mouseMoved ease-out cubic, mouseReleased) -> isTrusted=true",
         "overall_accuracy": "Aliyun 90%+ first-try blended OpenCV, 95%+ with VLM fallback for ICON. Recaptcha v2 checkbox 90% trusted click, image 60% OpenCV 85%+ VLM, v3 100% bypass. hCaptcha similar.",
-        "version_notes": "v0.3.4 LIVE DOM FIX: discovered via OxyBlink eval live z.ai DOM #aliyunCaptcha-sliding-slider 40x40 at 490,601.5 inside #aliyunCaptcha-sliding-body 300x40 rect 490,602 + #aliyunCaptcha-window-float 332x429. Previous get_slider_coords returned None because slider had w0h0 initially during animation. Now retries 5x with 0.6s delay, checks sliding-body fallback (x+20, y+h/2), window-float fallback, plus 15 selectors. Fixes trusted drag -> should enable F000. v0.3.3 selector fallback for 0,0 bug. v0.3.2 trusted CDP drag isTrusted=true F015->F000. v0.3.0 RECAPTCHA.",
+        "version_notes": "v0.3.5 LIVE DOM FIX: discovered via OxyBlink eval live z.ai DOM #aliyunCaptcha-sliding-slider 40x40 at 490,601.5 inside #aliyunCaptcha-sliding-body 300x40 rect 490,602 + #aliyunCaptcha-window-float 332x429. Previous get_slider_coords returned None because slider had w0h0 initially during animation. Now retries 5x with 0.6s delay, checks sliding-body fallback (x+20, y+h/2), window-float fallback, plus 15 selectors. Fixes trusted drag -> should enable F000. v0.3.3 selector fallback for 0,0 bug. v0.3.2 trusted CDP drag isTrusted=true F015->F000. v0.3.0 RECAPTCHA.",
     }
 
 

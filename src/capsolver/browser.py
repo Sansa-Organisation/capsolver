@@ -1725,33 +1725,79 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 3, sweep: bool 
             elif status != 200:
                 print(f"[drag] trusted failed {status}, fallback to JS")
         else:
-            print("[drag] get_slider_coords returned None - trying selector-based trusted drag")
-            # Try with selector - server will resolve from position, we still need to give to_x as approx
-            # First get from via eval again with selector fallback, then drag
-            # Attempt multiple selectors via server-side selector resolution
-            for sel in ["#aliyunCaptcha-sliding-slider", ".aliyunCaptcha-sliding-slider", "[class*=\"sliding-slider\"]", ".nc_btn", ".btn_slide"]:
+            print("[drag] get_slider_coords returned None - trying selector-based trusted drag with verbose DOM dump")
+            # Verbose dump of aliyun elements for debugging
+            try:
+                dbg_js = """
+(() => {
+  const els = document.querySelectorAll('[id*="aliyun"], [class*="aliyun"]');
+  const out=[];
+  for (const el of els) {
+    const r = el.getBoundingClientRect();
+    out.push({id: el.id, cls: (el.className||'').toString().slice(0,100), x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), display: window.getComputedStyle(el).display});
+  }
+  return {found: out.length, elements: out.slice(0,40), bodyHtml: document.body.innerHTML.slice(0,2000)};
+})()
+"""
+                s_dbg, r_dbg = eval_js(session_id, dbg_js, timeout=10)
+                print(f"[drag] DOM dump status {s_dbg} found {str(r_dbg)[:2000] if isinstance(r_dbg, dict) else str(r_dbg)[:2000]}")
+            except Exception as e:
+                print(f"[drag] DOM dump error {e}")
+
+            # Try sliding-body and window-float directly as anchors
+            anchor_selectors = [
+                "#aliyunCaptcha-sliding-body",
+                "#aliyunCaptcha-window-float",
+                "#aliyunCaptcha-img-box",
+                "#aliyunCaptcha-sliding-slider",
+                ".aliyunCaptcha-sliding-slider",
+                "#aliyunCaptcha-captcha-body",
+                "#captcha-element"
+            ]
+            for sel in anchor_selectors:
                 try:
-                    # Use from_x=0, to_x=slider_x, but with selector so server gets real from
-                    # For this to work, we need to estimate to_x as slider_x + from_x, but we don't know from_x
-                    # So we try: get from via eval, if still None, try drag with selector where to_x = slider_x (will be interpreted as relative? No.)
-                    # We'll attempt: from_x=0, to_x=slider_x, with selector - server will replace from_x with element center, but to_x remains slider_x (absolute)
-                    # To make it work, we need to get from first
-                    s, r = eval_js(session_id, f"""(() => {{ const el=document.querySelector('{sel}'); if(!el) return null; const rect=el.getBoundingClientRect(); return {{x:rect.x+rect.width/2, y:rect.y+rect.height/2}}; }})()""", timeout=10)
-                    if s==200 and isinstance(r, dict) and "x" in r:
-                        fx=float(r["x"]); fy=float(r["y"])
-                        if fx>0 and fy>0:
+                    s, r = eval_js(session_id, f"""(() => {{ const el=document.querySelector('{sel}'); if(!el) return null; const rect=el.getBoundingClientRect(); return {{x:rect.x, y:rect.y, w:rect.width, h:rect.height, cx:rect.x+rect.width/2, cy:rect.y+rect.height/2}}; }})()""", timeout=10)
+                    print(f"[drag] anchor {sel} status {s} res {r}")
+                    if s==200 and isinstance(r, dict) and "w" in r:
+                        w = float(r.get("w",0)); h = float(r.get("h",0)); x = float(r.get("x",0)); y = float(r.get("y",0))
+                        cx = float(r.get("cx", x+w/2)); cy = float(r.get("cy", y+h/2))
+                        # For sliding-body 300x40, we want from at left edge +20
+                        if "sliding-body" in sel and w>=200:
+                            fx = x + 20
+                            fy = y + h/2
+                            tx = fx + slider_x
+                            ty = fy + random.uniform(-1.5,1.5)
+                            print(f"[drag] using sliding-body fallback from ({fx:.1f},{fy:.1f}) -> ({tx:.1f},{ty:.1f})")
+                            status, res_text = drag_trusted(session_id, fx, fy, tx, ty, steps=random.randint(35,45), duration_ms=random.randint(1200,1600), selector="#aliyunCaptcha-sliding-slider")
+                            print(f"[drag] sliding-body trusted status {status} res {str(res_text)[:500]}")
+                            if status==200:
+                                status_res=status; res=res_text; used_trusted=True; break
+                        elif "window-float" in sel and w>=200:
+                            fx = x + 20
+                            fy = y + h - 20  # near bottom where slider lives
+                            # try to get slider y from sliding-body if exists
+                            s2, r2 = eval_js(session_id, """(() => { const b=document.getElementById('aliyunCaptcha-sliding-body'); if(!b) return null; const r=b.getBoundingClientRect(); return {x:r.x,y:r.y,w:r.width,h:r.height}; })()""", timeout=10)
+                            if s2==200 and isinstance(r2, dict) and r2.get("w",0)>=200:
+                                fx = float(r2["x"])+20
+                                fy = float(r2["y"])+float(r2["h"])/2
+                            tx = fx + slider_x
+                            ty = fy + random.uniform(-1.5,1.5)
+                            print(f"[drag] using window-float fallback from ({fx:.1f},{fy:.1f}) -> ({tx:.1f},{ty:.1f})")
+                            status, res_text = drag_trusted(session_id, fx, fy, tx, ty, steps=random.randint(35,45), duration_ms=random.randint(1200,1600), selector="#aliyunCaptcha-sliding-slider")
+                            print(f"[drag] window-float trusted status {status} res {str(res_text)[:500]}")
+                            if status==200:
+                                status_res=status; res=res_text; used_trusted=True; break
+                        elif w>0 and h>0 and x>0 and y>0:
+                            fx=cx; fy=cy
                             tx=fx+slider_x
                             ty=fy+random.uniform(-1.5,1.5)
                             print(f"[drag] selector fallback {sel} from ({fx:.1f},{fy:.1f}) -> ({tx:.1f},{ty:.1f})")
                             status, res_text = drag_trusted(session_id, fx, fy, tx, ty, steps=random.randint(35,45), duration_ms=random.randint(1200,1600), selector=sel)
                             print(f"[drag] selector trusted status {status} res {str(res_text)[:500]}")
-                            status_res=status
-                            res=res_text
                             if status==200:
-                                used_trusted=True
-                                break
+                                status_res=status; res=res_text; used_trusted=True; break
                 except Exception as e:
-                    print(f"[drag] selector {sel} error {e}")
+                    print(f"[drag] anchor {sel} error {e}")
                     continue
             if not used_trusted:
                 print("[drag] all selector attempts failed - fallback to JS")

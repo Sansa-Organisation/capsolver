@@ -1,0 +1,35 @@
+{
+  "puzzle_x": 3,
+  "slider_x": 20.199850179961697,
+  "confidence": 0.7,
+  "method": "textured_sharp",
+  "candidates": [
+    [
+      3,
+      33.355479482906176,
+      33.108835187604164
+    ],
+    [
+      276,
+      13.751586077203733,
+      13.569298680239632
+    ],
+    [
+      273,
+      15.806326291608485,
+      15.08734966893383
+    ],
+    [
+      0,
+      17.694993468762668,
+      17.48205035809198
+    ],
+    [
+      270,
+      86.37923742173777,
+      84.57893788568083
+    ]
+  ],
+  "main_url": "https://static-captcha-sgp.aliyuncs.com/qst/aigc/online/2/a3c2792a-5c03-4e30-90e1-7b4552849bcd/inpainted_with_mask.png",
+  "puzzle_url": "https://static-captcha-sgp.aliyuncs.com/qst/aigc/online/2/a3c2792a-5c03-4e30-90e1-7b4552849bcd/bitwise_and_result.png"
+}

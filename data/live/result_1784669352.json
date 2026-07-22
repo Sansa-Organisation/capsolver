@@ -1,0 +1,35 @@
+{
+  "puzzle_x": 56,
+  "slider_x": 115.22413402038451,
+  "confidence": 0.10328393773278721,
+  "method": "masked_var_complex",
+  "candidates": [
+    [
+      56,
+      73.82195748376307,
+      66.28742343474283
+    ],
+    [
+      126,
+      89.07120361046184,
+      80.28527314049205
+    ],
+    [
+      0,
+      100.82823190842656,
+      96.4458038081688
+    ],
+    [
+      6,
+      106.99110607348418,
+      102.34519498156891
+    ],
+    [
+      11,
+      109.64302436230265,
+      104.33904897404867
+    ]
+  ],
+  "main_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsCAIAAAD2HxkiAAEAAElEQVR4nEz9yZIsS5IliJ3DLKKqZubud3hDxIuMyMzKzBq6qrp73dT4AWywwL9igS8AEbAAgYDuqsqujBxifMOd3G1QVRFmxoLF/OUjiqAXN66bm6nJwHwm5ndPp6B4RLh3D48IQEj3QGCayjxPX57PFHn79kFVbtdtXfceoSQJN/cAwo+n+u03b56fL7fbXkuIEgiCAQIQkEB0bx5zkb05VXRSQLatC2XbOgkRikJAhBeCAotgUAgV1iJFhSqte9sNgJuLyrQs33z3y7a3fd/WvW9bu57PiBBlFXGPde8BLrPOtYZ7KfJv/vbXh+OpN7t8+fynP/24dnePABDoFgF2c48gSGGtOhcVlW3b3DEXOZ7qv/93f70cTwBLXdrWfvrxz+fzeV7mvl0u5/Pb0/RyxZ9/vHz9y3d/87e/3vd2en",
+  "puzzle_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAEsCAYAAADzW4JYAAAGk0lEQVR4nO2Wy48cVxWHv3Orume6PTP2+BXHHntiMnmhRCAcETsIg0KEhJDIwkQoa/4BkLKHIHYRm6zYAitCFiDYIEXhJSWQLAKRBSggA7GdOI7n2d3VVbfqnsPiVteMTZx4yeJ+rZK6qu/vnuc9XZBIJBKJRCKRSCQSiUQikUj8n/PsN87c++Pnnrrw9NmVwUetc7c++NTDJ79/4etPvHTu8Ue+c8fCNVi65/Sp88PVk6yuHntmbe3g0h0Jv3rhoYdO3XPyCDLk+PFjK/ftH67ekXDl+In7l48c7WE5J1dOyNrayU/fkXA4HH52375F0IzDdx2Wo0eWz9+R8ODB/er682DC3MIiRw8tPQZ8aHZvtjjo98kcmEGWc+yuQysLsO/jhFneyx7DZVhQQFhcGOjKcezjhHrk6KEcl0WLajSN3i"
+}
