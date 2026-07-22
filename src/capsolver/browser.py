@@ -141,19 +141,23 @@ def drag_trusted(
     to_y: float,
     steps: int = 40,
     duration_ms: int = 1300,
+    selector: str | None = None,
 ) -> tuple[int, str]:
     """Trusted drag via CDP Input.dispatchMouseEvent (isTrusted=true) — fixes F015 bot detection."""
+    body = {
+        "from_x": from_x,
+        "from_y": from_y,
+        "to_x": to_x,
+        "to_y": to_y,
+        "steps": steps,
+        "duration_ms": duration_ms,
+    }
+    if selector:
+        body["selector"] = selector
     return oxy_request(
         "POST",
         f"/api/v1/sessions/{session_id}/drag",
-        {
-            "from_x": from_x,
-            "from_y": from_y,
-            "to_x": to_x,
-            "to_y": to_y,
-            "steps": steps,
-            "duration_ms": duration_ms,
-        },
+        body,
     )
 
 
@@ -171,18 +175,70 @@ def click_trusted(
 
 
 def get_slider_coords(session_id: str) -> tuple[float, float] | None:
-    """Get slider center coords via eval for trusted drag."""
-    status, res = eval_js(
-        session_id,
-        """(() => {
-  const s = document.querySelector('#aliyunCaptcha-sliding-slider') || document.querySelector('.aliyunCaptcha-sliding-slider');
-  if (!s) return null;
-  const r = s.getBoundingClientRect();
-  return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height};
-})()""",
-    )
+    """Get slider center coords via eval for trusted drag - robust multi-selector."""
+    js = """(() => {
+  const selectors = [
+    '#aliyunCaptcha-sliding-slider',
+    '.aliyunCaptcha-sliding-slider',
+    '#aliyunCaptcha-sliding-track #aliyunCaptcha-sliding-slider',
+    '[class*="sliding-slider"]',
+    '[id*="sliding-slider"]',
+    '.aliyunCaptcha-slider',
+    '.slider',
+    '[class*="slider"]',
+    '#nc_1_n1z', // some aliyun id pattern
+    '#nc_2_n1z',
+    '.btn_slide',
+    '.slidetounlock',
+    '[id*="nc_"]',
+    '.nc_scale',
+    '.nc_btn'
+  ];
+  for (const sel of selectors) {
+    try {
+      const s = document.querySelector(sel);
+      if (!s) continue;
+      const r = s.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      if (r.x === 0 && r.y === 0 && r.width < 5) continue;
+      // Check visible
+      const style = window.getComputedStyle(s);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+      return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height, sel: sel, x0: r.x, y0: r.y};
+    } catch(e){}
+  }
+  // Fallback: try to find any element with background that looks like slider button - search by size ~40x40 to 60x60 near bottom of captcha
+  try {
+    const all = Array.from(document.querySelectorAll('div, span, button'));
+    for (const el of all) {
+      const r = el.getBoundingClientRect();
+      if (r.width >= 30 && r.width <= 70 && r.height >= 30 && r.height <= 70) {
+        // check if near captcha container
+        const cap = el.closest('[id*="aliyun"], [class*="aliyun"], [class*="captcha"]');
+        if (cap) {
+          return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height, sel: 'fallback_cap_'+el.tagName, x0: r.x, y0: r.y};
+        }
+      }
+    }
+  } catch(e){}
+  return null;
+})()"""
+    status, res = eval_js(session_id, js, timeout=10)
+    # print(f"[get_slider_coords] status {status} res {res}")
     if status == 200 and isinstance(res, dict) and "x" in res:
-        return (float(res["x"]), float(res["y"]))
+        try:
+            x = float(res["x"])
+            y = float(res["y"])
+            # filter out 0,0 which indicates hidden or not found
+            if x == 0 and y == 0:
+                return None
+            if x < 0 or y < 0:
+                return None
+            if x > 5000 or y > 5000:
+                return None
+            return (x, y)
+        except Exception:
+            return None
     return None
 
 
@@ -1611,6 +1667,8 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 3, sweep: bool 
         # Fallback to JS trajectory if trusted endpoint 404 (old image)
         coords = get_slider_coords(session_id)
         used_trusted = False
+        status_res = 0
+        res_text = ""
         if coords:
             from_x, from_y = coords
             to_x = from_x + slider_x
@@ -1627,12 +1685,38 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 3, sweep: bool 
                 print("[drag] trusted endpoint 404 - fallback to JS (old image)")
             elif status != 200:
                 print(f"[drag] trusted failed {status}, fallback to JS")
-            else:
-                # trusted succeeded
-                pass
         else:
-            print("[drag] get_slider_coords returned None - fallback to JS")
-            status_res = 0
+            print("[drag] get_slider_coords returned None - trying selector-based trusted drag")
+            # Try with selector - server will resolve from position, we still need to give to_x as approx
+            # First get from via eval again with selector fallback, then drag
+            # Attempt multiple selectors via server-side selector resolution
+            for sel in ["#aliyunCaptcha-sliding-slider", ".aliyunCaptcha-sliding-slider", "[class*=\"sliding-slider\"]", ".nc_btn", ".btn_slide"]:
+                try:
+                    # Use from_x=0, to_x=slider_x, but with selector so server gets real from
+                    # For this to work, we need to estimate to_x as slider_x + from_x, but we don't know from_x
+                    # So we try: get from via eval, if still None, try drag with selector where to_x = slider_x (will be interpreted as relative? No.)
+                    # We'll attempt: from_x=0, to_x=slider_x, with selector - server will replace from_x with element center, but to_x remains slider_x (absolute)
+                    # To make it work, we need to get from first
+                    s, r = eval_js(session_id, f"""(() => {{ const el=document.querySelector('{sel}'); if(!el) return null; const rect=el.getBoundingClientRect(); return {{x:rect.x+rect.width/2, y:rect.y+rect.height/2}}; }})()""", timeout=10)
+                    if s==200 and isinstance(r, dict) and "x" in r:
+                        fx=float(r["x"]); fy=float(r["y"])
+                        if fx>0 and fy>0:
+                            tx=fx+slider_x
+                            ty=fy+random.uniform(-1.5,1.5)
+                            print(f"[drag] selector fallback {sel} from ({fx:.1f},{fy:.1f}) -> ({tx:.1f},{ty:.1f})")
+                            status, res_text = drag_trusted(session_id, fx, fy, tx, ty, steps=random.randint(35,45), duration_ms=random.randint(1200,1600), selector=sel)
+                            print(f"[drag] selector trusted status {status} res {str(res_text)[:500]}")
+                            status_res=status
+                            res=res_text
+                            if status==200:
+                                used_trusted=True
+                                break
+                except Exception as e:
+                    print(f"[drag] selector {sel} error {e}")
+                    continue
+            if not used_trusted:
+                print("[drag] all selector attempts failed - fallback to JS")
+                status_res = 0
 
         if not used_trusted:
             # Generate human trajectory fallback (JS MouseEvent - isTrusted=false, may trigger F015)
