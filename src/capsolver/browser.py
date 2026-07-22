@@ -175,8 +175,14 @@ def click_trusted(
 
 
 def get_slider_coords(session_id: str) -> tuple[float, float] | None:
-    """Get slider center coords via eval for trusted drag - robust multi-selector."""
-    js = """(() => {
+    """Get slider center coords via eval for trusted drag - robust multi-selector v0.3.4.
+    Based on live z.ai DOM dump: #aliyunCaptcha-sliding-slider 40x40 at 490,601.5 inside #aliyunCaptcha-sliding-body 300x40.
+    Retries 5 times with delay to handle animation.
+    """
+    # JS that tries all selectors, including sliding-body fallback, and returns best candidate even if w=0 initially
+    js_template = """
+(() => {
+  const attempt = %d;
   const selectors = [
     '#aliyunCaptcha-sliding-slider',
     '.aliyunCaptcha-sliding-slider',
@@ -186,7 +192,10 @@ def get_slider_coords(session_id: str) -> tuple[float, float] | None:
     '.aliyunCaptcha-slider',
     '.slider',
     '[class*="slider"]',
-    '#nc_1_n1z', // some aliyun id pattern
+    '#aliyunCaptcha-sliding-body',
+    '#aliyunCaptcha-window-float',
+    '#aliyunCaptcha-img-box',
+    '#nc_1_n1z',
     '#nc_2_n1z',
     '.btn_slide',
     '.slidetounlock',
@@ -194,51 +203,81 @@ def get_slider_coords(session_id: str) -> tuple[float, float] | None:
     '.nc_scale',
     '.nc_btn'
   ];
+  // First pass: exact slider with non-zero rect
   for (const sel of selectors) {
     try {
-      const s = document.querySelector(sel);
-      if (!s) continue;
-      const r = s.getBoundingClientRect();
-      if (r.width === 0 && r.height === 0) continue;
-      if (r.x === 0 && r.y === 0 && r.width < 5) continue;
-      // Check visible
-      const style = window.getComputedStyle(s);
-      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
-      return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height, sel: sel, x0: r.x, y0: r.y};
+      const els = document.querySelectorAll(sel);
+      for (const s of els) {
+        const r = s.getBoundingClientRect();
+        const style = window.getComputedStyle(s);
+        if (r.width >= 25 && r.height >= 25 && r.width <= 80 && r.height <= 80) {
+          if (style.display === 'none' || style.visibility === 'hidden') continue;
+          // Must be near captcha
+          const cap = s.closest('[id*="aliyun"], [class*="aliyun"]') || document.getElementById('aliyunCaptcha-window-float');
+          if (!cap && !sel.includes('aliyun')) continue;
+          return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height, sel: sel, x0: r.x, y0: r.y, attempt};
+        }
+      }
     } catch(e){}
   }
-  // Fallback: try to find any element with background that looks like slider button - search by size ~40x40 to 60x60 near bottom of captcha
+  // Second pass: allow w=0 elements but try to get parent body rect
+  try {
+    const body = document.getElementById('aliyunCaptcha-sliding-body');
+    if (body) {
+      const r = body.getBoundingClientRect();
+      if (r.width >= 200 && r.height >= 20) {
+        // slider is at left edge of body, center at x+20, y + h/2
+        return {x: r.x + 20, y: r.y + r.height/2, w: 40, h: r.height, sel: 'sliding-body-fallback', x0: r.x, y0: r.y, attempt};
+      }
+    }
+  } catch(e){}
+  // Third: search any 30-70 sized element inside aliyun container (previous fallback)
   try {
     const all = Array.from(document.querySelectorAll('div, span, button'));
     for (const el of all) {
       const r = el.getBoundingClientRect();
-      if (r.width >= 30 && r.width <= 70 && r.height >= 30 && r.height <= 70) {
-        // check if near captcha container
+      if (r.width >= 25 && r.width <= 80 && r.height >= 25 && r.height <= 80) {
         const cap = el.closest('[id*="aliyun"], [class*="aliyun"], [class*="captcha"]');
         if (cap) {
-          return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height, sel: 'fallback_cap_'+el.tagName, x0: r.x, y0: r.y};
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none') continue;
+          return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height, sel: 'fallback_cap_'+el.tagName, x0: r.x, y0: r.y, attempt};
         }
       }
     }
   } catch(e){}
+  // Final: return body if found even without size check
+  try {
+    const win = document.getElementById('aliyunCaptcha-window-float');
+    if (win) {
+      const r = win.getBoundingClientRect();
+      return {x: r.x + 30, y: r.y + r.height - 20, w: 40, h: 40, sel: 'window-float-fallback', x0: r.x, y0: r.y, attempt, w_full: r.width, h_full: r.height};
+    }
+  } catch(e){}
   return null;
 })()"""
-    status, res = eval_js(session_id, js, timeout=10)
-    # print(f"[get_slider_coords] status {status} res {res}")
-    if status == 200 and isinstance(res, dict) and "x" in res:
-        try:
-            x = float(res["x"])
-            y = float(res["y"])
-            # filter out 0,0 which indicates hidden or not found
-            if x == 0 and y == 0:
-                return None
-            if x < 0 or y < 0:
-                return None
-            if x > 5000 or y > 5000:
-                return None
-            return (x, y)
-        except Exception:
-            return None
+    for attempt in range(1, 6):
+        js = js_template % attempt
+        status, res = eval_js(session_id, js, timeout=10)
+        if status == 200 and isinstance(res, dict) and "x" in res:
+            try:
+                x = float(res["x"])
+                y = float(res["y"])
+                # filter out 0,0 which indicates hidden or not found
+                if x == 0 and y == 0:
+                    # retry
+                    pass
+                elif x < 0 or y < 0 or x > 5000 or y > 5000:
+                    pass
+                else:
+                    print(f"[get_slider_coords] attempt {attempt} found {res.get('sel')} at ({x:.1f},{y:.1f}) w {res.get('w')} h {res.get('h')}")
+                    return (x, y)
+            except Exception as e:
+                print(f"[get_slider_coords] parse error {e} res {res}")
+        # sleep between attempts except last
+        if attempt < 5:
+            time.sleep(0.6)
+    print("[get_slider_coords] FAILED after 5 attempts")
     return None
 
 
