@@ -13,17 +13,20 @@ COPY src/ src/
 RUN pip install --no-cache-dir -e .
 
 # Pre-download OpenCV DNN models for pure self-hosted 100% no external API at runtime
-# MobileNet-SSD + YOLOv3-tiny + coco.names baked into image
+# YOLOv3-tiny + coco.names baked, MobileNet-SSD optional (repo may 404)
 RUN mkdir -p /tmp/models /tmp/mobilenet_ssd /tmp/yolo /app/models && \
     curl -L --retry 3 -o /tmp/yolo/yolov3-tiny.cfg https://raw.githubusercontent.com/pjreddie/darknet/master/cfg/yolov3-tiny.cfg && \
     curl -L --retry 3 -o /tmp/yolo/coco.names https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names && \
-    curl -L --retry 3 -o /tmp/mobilenet_ssd/MobileNetSSD_deploy.prototxt https://raw.githubusercontent.com/chuanqi305/MobileNet-SSD/master/MobileNetSSD_deploy.prototxt && \
-    curl -L --retry 3 -o /tmp/mobilenet_ssd/MobileNetSSD_deploy.caffemodel https://raw.githubusercontent.com/chuanqi305/MobileNet-SSD/master/MobileNetSSD_deploy.caffemodel || echo "caffemodel download failed, will fallback to runtime download" && \
     curl -L --retry 3 -o /tmp/yolo/yolov3-tiny.weights https://pjreddie.com/media/files/yolov3-tiny.weights || echo "yolo weights download failed, will fallback" && \
+    (curl -L --retry 3 -o /tmp/mobilenet_ssd/MobileNetSSD_deploy.prototxt https://raw.githubusercontent.com/chuanqi305/MobileNet-SSD/master/MobileNetSSD_deploy.prototxt || true) && \
+    (curl -L --retry 3 -o /tmp/mobilenet_ssd/MobileNetSSD_deploy.prototxt https://github.com/chuanqi305/MobileNet-SSD/raw/master/MobileNetSSD_deploy.prototxt || true) && \
+    (curl -L --retry 3 -o /tmp/mobilenet_ssd/MobileNetSSD_deploy.caffemodel https://github.com/chuanqi305/MobileNet-SSD/raw/master/MobileNetSSD_deploy.caffemodel || echo "SSD caffemodel download failed") && \
+    for f in /tmp/mobilenet_ssd/* /tmp/yolo/*; do if [ -f "$f" ]; then sz=$(wc -c < "$f"); if [ "$sz" -lt 1000 ]; then echo "Removing tiny invalid $f size $sz"; rm -f "$f"; fi; fi; done && \
     cp -r /tmp/yolo/* /tmp/models/ 2>/dev/null || true && \
     cp -r /tmp/mobilenet_ssd/* /tmp/models/ 2>/dev/null || true && \
     cp /tmp/yolo/coco.names /tmp/models/coco.names 2>/dev/null || true && \
-    ls -lh /tmp/models/ /tmp/yolo/ /tmp/mobilenet_ssd/ || true
+    ls -lh /tmp/models/ /tmp/yolo/ /tmp/mobilenet_ssd/ || true && \
+    echo "Models ready: YOLO $(ls -lh /tmp/models/yolov3-tiny.weights 2>/dev/null | awk '{print $5}') + SSD $(ls -lh /tmp/models/MobileNetSSD* 2>/dev/null | wc -l) files"
 
 EXPOSE 8000
 

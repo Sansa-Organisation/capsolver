@@ -364,7 +364,7 @@ def _solve_images_all_types(
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "service": "capsolver", "version": "0.3.0", "supported_types": SUPPORTED_TYPES}
+    return {"status": "ok", "service": "capsolver", "version": "0.3.2", "supported_types": SUPPORTED_TYPES}
 
 
 @router.get("/types", response_model=TypesResponse)
@@ -503,7 +503,7 @@ async def solve_upload(
 async def solver_info():
     """Explain all captcha types and solver strategies v0.3.0."""
     return {
-        "version": "0.3.0",
+        "version": "0.3.2",
         "supported_types": SUPPORTED_TYPES,
         "aliases": TYPE_ALIASES,
         "captcha_types": {
@@ -647,7 +647,7 @@ async def solver_info():
         "slider_mapping": "Non-linear: puzzle_left = 0.00355*slider^2 + 0.077*slider -0.0039, inverted via quadratic",
         "drag_fix": "Root cause F015 was isTrusted=false from JS MouseEvent dispatch. Fixed with trusted CDP Input.dispatchMouseEvent via OxyBlink drag endpoint (mousePressed, mouseMoved ease-out cubic, mouseReleased) -> isTrusted=true",
         "overall_accuracy": "Aliyun 90%+ first-try blended OpenCV, 95%+ with VLM fallback for ICON. Recaptcha v2 checkbox 90% trusted click, image 60% OpenCV 85%+ VLM, v3 100% bypass. hCaptcha similar.",
-        "version_notes": "v0.3.0 adds RECAPTCHA (V2 checkbox+image, V2 invisible, V3 0.9 score bypass, Enterprise) + HCAPTCHA + FUNCAPTCHA/GEETEST/TURNSTILE placeholders. API returns token, score, click_positions, icons, challenge_type.",
+        "version_notes": "v0.3.2 trusted CDP drag fix: Aliyun solver now uses drag_trusted via OxyBlink CDP Input.dispatchMouseEvent isTrusted=true fixing F015 bot detection -> F000 success. v0.3.0 added RECAPTCHA (V2 checkbox+image, V2 invisible, V3 0.9 score bypass, Enterprise) + HCAPTCHA + FUNCAPTCHA/GEETEST/TURNSTILE placeholders. API returns token, score, click_positions, icons, challenge_type.",
     }
 
 

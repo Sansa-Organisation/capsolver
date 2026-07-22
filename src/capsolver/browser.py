@@ -1607,15 +1607,46 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 3, sweep: bool 
     for attempt_idx, (puzzle_x, slider_x, mvar) in enumerate(attempts):
         print(f"\n[attempt {attempt_idx+1}/{len(attempts)}] puzzle_x={puzzle_x} slider_x={slider_x:.2f} mvar={mvar:.1f}")
 
-        # Generate human trajectory
-        traj = generate_human_trajectory(slider_x, num_points=random.randint(28, 42))
-        js_drag = trajectory_to_js_events(traj)
+        # Try trusted drag via CDP Input.dispatchMouseEvent (isTrusted=true) - fixes F015 bot detection
+        # Fallback to JS trajectory if trusted endpoint 404 (old image)
+        coords = get_slider_coords(session_id)
+        used_trusted = False
+        if coords:
+            from_x, from_y = coords
+            to_x = from_x + slider_x
+            to_y = from_y + random.uniform(-1.5, 1.5)
+            steps = random.randint(35, 45)
+            duration_ms = random.randint(1200, 1600)
+            print(f"[drag] trusted CDP from ({from_x:.1f},{from_y:.1f}) -> ({to_x:.1f},{to_y:.1f}) steps {steps} dur {duration_ms}")
+            status, res_text = drag_trusted(session_id, from_x, from_y, to_x, to_y, steps=steps, duration_ms=duration_ms)
+            print(f"[drag] trusted status {status} res {str(res_text)[:800]}")
+            status_res = status
+            res = res_text
+            used_trusted = (status == 200)
+            if status == 404:
+                print("[drag] trusted endpoint 404 - fallback to JS (old image)")
+            elif status != 200:
+                print(f"[drag] trusted failed {status}, fallback to JS")
+            else:
+                # trusted succeeded
+                pass
+        else:
+            print("[drag] get_slider_coords returned None - fallback to JS")
+            status_res = 0
 
-        status, res = eval_js(session_id, js_drag, timeout=20)
-        print(f"[drag] status {status} res {str(res)[:800]}")
+        if not used_trusted:
+            # Generate human trajectory fallback (JS MouseEvent - isTrusted=false, may trigger F015)
+            traj = generate_human_trajectory(slider_x, num_points=random.randint(28, 42))
+            js_drag = trajectory_to_js_events(traj)
+            status, res = eval_js(session_id, js_drag, timeout=20)
+            print(f"[drag] JS fallback status {status} res {str(res)[:800]}")
+        else:
+            # For uniform logging, set status/res from trusted attempt
+            status = status_res
+            res = res_text
 
         # Wait for verify
-        time.sleep(2.5)
+        time.sleep(3.0)
 
         # Check verify calls and params
         status2, res2 = eval_js(session_id, """
