@@ -364,7 +364,7 @@ def _solve_images_all_types(
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "service": "capsolver", "version": "0.3.12", "supported_types": SUPPORTED_TYPES}
+    return {"status": "ok", "service": "capsolver", "version": "0.3.13", "supported_types": SUPPORTED_TYPES}
 
 
 @router.get("/types", response_model=TypesResponse)
@@ -501,9 +501,9 @@ async def solve_upload(
 
 @router.get("/solver/info")
 async def solver_info():
-    """Explain all captcha types and solver strategies v0.3.12."""
+    """Explain all captcha types and solver strategies v0.3.13."""
     return {
-        "version": "0.3.12",
+        "version": "0.3.13",
         "supported_types": SUPPORTED_TYPES,
         "aliases": TYPE_ALIASES,
         "captcha_types": {
@@ -646,8 +646,8 @@ async def solver_info():
         },
         "slider_mapping": "Non-linear: puzzle_left = 0.00355*slider^2 + 0.077*slider -0.0039, verified puzzleLeft 12.2935px for slider 49px, inverted via quadratic, true gap puzzle 157 slider 200 gives T001",
         "drag_fix": "Root cause F015 was isTrusted=false + missing stealth (cdc_, permissions, pre-moves). Fixed with trusted CDP Input.dispatchMouseEvent isTrusted=true + stealth Chrome131 cdc_ hide perms spoof pre-moves 1-3 offset ±30x±15y press jitter overshoot 30%. Direct sweep proved T001 true slider 200->710 securityToken 6oOo7e72... certify 2Rz1Ye2osB",
-        "overall_accuracy": "Aliyun T001 true proven direct sweep, v0.3.12 broad sweep fallback [50,100,150,200,239,260] handles detection off (258 vs true 157), stealth F015->T001, 90%+ with sweep, 95%+ ideal. Recaptcha checkbox bframe hidden->visible 400x580 screenshot 23KB 90% trusted.",
-        "version_notes": "v0.3.12 BROAD SWEEP: detection gave puzzle_x 258 conf 0.99 but true gap 157 slider 200 gave T001 true (SID ee0ad8a2). Added sweep [30,60,90,120,150,170,190,200,210,230,240,250,260] plus around best ±10/20/30, securityToken extraction from verify JSON (VerifyCode T001 VerifyResult true). v0.3.6 robust selector polling 10x window-show re-click + hardcoded 510,621.5 fallback + StdRng Send + cdc_ stealth + recaptcha trusted click. v0.3.5 LIVE DOM FIX sliding-body 300x40. v0.3.2 trusted CDP drag isTrusted=true.",
+        "overall_accuracy": "Aliyun T001 true proven direct sweep, v0.3.13 broad sweep fallback [50,100,150,200,239,260] handles detection off (258 vs true 157), stealth F015->T001, 90%+ with sweep, 95%+ ideal. Recaptcha checkbox bframe hidden->visible 400x580 screenshot 23KB 90% trusted.",
+        "version_notes": "v0.3.13 BROAD SWEEP: detection gave puzzle_x 258 conf 0.99 but true gap 157 slider 200 gave T001 true (SID ee0ad8a2). Added sweep [30,60,90,120,150,170,190,200,210,230,240,250,260] plus around best ±10/20/30, securityToken extraction from verify JSON (VerifyCode T001 VerifyResult true). v0.3.6 robust selector polling 10x window-show re-click + hardcoded 510,621.5 fallback + StdRng Send + cdc_ stealth + recaptcha trusted click. v0.3.5 LIVE DOM FIX sliding-body 300x40. v0.3.2 trusted CDP drag isTrusted=true.",
     }
 
 
@@ -773,7 +773,7 @@ async def trigger_captcha(session_id: str):
 
 @router.post("/challenge/solve/{session_id}")
 async def solve_challenge(session_id: str, max_retries: int = 5, captcha_type: Optional[str] = None, sweep: bool = True):
-    """Attempt to solve captcha in session with trusted drag - v0.3.12 broad sweep T001 proven."""
+    """Attempt to solve captcha in session with trusted drag - v0.3.13 broad sweep T001 proven."""
     success, param, info = browser.solve_captcha_in_session(session_id, max_retries=max_retries, sweep=sweep)
     return {
         "success": success,

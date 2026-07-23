@@ -1722,6 +1722,67 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
     if not challenge:
         return False, None, {"error": "extract failed"}
 
+    # v0.3.13 FIX: small puzzle_x <30 (e.g., 15->55 medium) always F015 even with trusted drag 55-200 direct test showed 8x F015 with new certify each time.
+    # This subtype needs new deviceToken (new OxyBlink session) not just slider retry. For z.ai, force new session until puzzle_x >=30 or 5 tries.
+    if challenge.puzzle_x < 30:
+        print(f"[small-puzzle] initial puzzle_x={challenge.puzzle_x} <30, trying new sessions for large puzzle (proven T001 for 157->200)")
+        original_sid = session_id
+        for new_try in range(5):
+            try:
+                # Destroy old if different from original
+                if session_id != original_sid:
+                    try:
+                        destroy_session(session_id)
+                    except Exception:
+                        pass
+                new_sid = create_session()
+                if not new_sid:
+                    continue
+                print(f"[small-puzzle] new session attempt {new_try+1} sid {new_sid}")
+                if not navigate(new_sid, "https://chat.z.ai/auth/"):
+                    destroy_session(new_sid)
+                    continue
+                time.sleep(3)
+                # Trigger captcha same as routes.py
+                from capsolver.drag import get_intercept_js
+                eval_js(new_sid, get_intercept_js())
+                eval_js(new_sid, "(() => { const btns=Array.from(document.querySelectorAll('button')); for(const b of btns){ if(b.innerText.toLowerCase().includes('email')){ b.click(); return {clicked:'email'}; } } if(btns[1]){ btns[1].click(); return {clicked:'btn1'}; } return {clicked:null}; })()")
+                time.sleep(2)
+                eval_js(new_sid, "(() => { const els=Array.from(document.querySelectorAll('a, button, span')); for(const e of els){ if(e.innerText&&e.innerText.toLowerCase().includes('sign up')){ e.click(); return {clicked:e.innerText}; } } return {clicked:null}; })()")
+                time.sleep(1.5)
+                eval_js(new_sid, "(() => { const btns=Array.from(document.querySelectorAll('button')); for(const b of btns){ const t=b.innerText.toLowerCase(); if(t.includes('create')&&t.includes('account')){b.click();return{clicked:b.innerText};} if(t.includes('sign up')){b.click();return{clicked:b.innerText};} } if(btns.length){btns[btns.length-1].click();return{clicked:'last'};} return {clicked:null}; })()")
+                time.sleep(2)
+                eval_js(new_sid, "(() => { const cap=document.querySelector('#aliyunCaptcha-captcha-body, [id*=\"aliyunCaptcha\"], .aliyunCaptcha'); if(cap){ cap.click(); return {clicked:true}; } return {clicked:false}; })()")
+                time.sleep(3)
+                new_challenge = extract_and_solve(new_sid)
+                if not new_challenge:
+                    print(f"[small-puzzle] extract failed for new sid {new_sid}")
+                    destroy_session(new_sid)
+                    continue
+                print(f"[small-puzzle] new challenge puzzle_x={new_challenge.puzzle_x} slider_x={new_challenge.slider_x} conf={new_challenge.detection.confidence if hasattr(new_challenge.detection,'confidence') else 'n/a'}")
+                if new_challenge.puzzle_x >= 30:
+                    print(f"[small-puzzle] got large puzzle {new_challenge.puzzle_x} >=30, using new session {new_sid} instead of {original_sid}")
+                    # Destroy original old session if different
+                    if original_sid != new_sid:
+                        try:
+                            destroy_session(original_sid)
+                        except Exception:
+                            pass
+                    session_id = new_sid
+                    challenge = new_challenge
+                    info["small_puzzle_retry"] = {"from": original_sid, "to": new_sid, "attempt": new_try+1, "new_puzzle_x": new_challenge.puzzle_x}
+                    break
+                else:
+                    print(f"[small-puzzle] still small {new_challenge.puzzle_x} <30, retrying new session")
+                    destroy_session(new_sid)
+                    continue
+            except Exception as e:
+                print(f"[small-puzzle] exception {e}")
+                continue
+        # After loop, if still small, proceed with fine sweep anyway (will try ±1-3)
+        if challenge.puzzle_x < 30:
+            print(f"[small-puzzle] after 5 new sessions still small {challenge.puzzle_x}, proceeding with fine ±1-3 sweep")
+
     # Scene classification + refined position for first-try
     attempts: List[Tuple[float, float, float]] = []  # (puzzle_x refined, slider_x, mvar)
 
