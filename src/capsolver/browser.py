@@ -2019,15 +2019,16 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
 })()
 """)
                 time.sleep(1.5)
-                # Re-extract for next attempt? For now reuse same challenge but new slider_x
-                # The challenge images stay same for a given CertifyId, so we can keep trying
-                # But if Aliyun issued new challenge on fail, need to re-extract
+                # Re-extract for next attempt? Challenge may change on fail (new CertifyId)
                 new_challenge = extract_and_solve(session_id)
                 if new_challenge and new_challenge.main_url != challenge.main_url:
-                    print(f"[retry] new challenge detected, re-solving")
+                    print(f"[retry] new challenge detected old {challenge.main_url[:60]} new {new_challenge.main_url[:60]} puzzle_x {new_challenge.puzzle_x} slider {new_challenge.slider_x}")
                     challenge = new_challenge
-                    # Update attempts for remaining
-                    break  # outer will continue with old attempts but we re-loop?
+                    # Don't break - continue with next attempt, but also re-evaluate best around new detection
+                    # If broad sweep still pending, it will try next slider_x
+                    # Optionally add new detection's best as next attempt priority (insert)
+                    # For now just continue loop
+                    time.sleep(1.0)
 
     return False, None, info
 
