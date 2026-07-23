@@ -176,7 +176,7 @@ def trajectory_to_js_events(trajectory: List[Tuple[float, float, int]]) -> str:
 
 
 def get_intercept_js() -> str:
-    """JS to intercept fetch/XHR and capture captcha init, images, verify calls."""
+    """JS to intercept fetch/XHR and capture captcha init, images, verify calls - v0.3.8 robust like direct_sweep.py that achieved T001."""
     return """
 (() => {
   window.__capInitCalls = window.__capInitCalls || [];
@@ -185,72 +185,86 @@ def get_intercept_js() -> str:
   window.__signupCalls = window.__signupCalls || [];
   window.__capImages = window.__capImages || [];
   window.__capParams = window.__capParams || [];
+  window.__allFetch = window.__allFetch || [];
 
-  // Hook fetch
+  // Hook fetch - capture ALL then filter (like direct_sweep proven T001)
   const origFetch = window.fetch;
   window.fetch = async function(...args) {
     const [url, opts] = args;
     const urlStr = typeof url === 'string' ? url : url.url || '';
+    window.__allFetch.push({url: urlStr, time: Date.now(), type: 'fetch_req', method: opts?.method||'GET', body: (opts?.body||'').toString().slice(0,1000)});
     try {
       const resp = await origFetch.apply(this, args);
       const clone = resp.clone();
-      // Capture interesting calls
-      if (urlStr.includes('captcha') || urlStr.includes('no8xfe') || urlStr.includes('sgp.aliyuncs.com') || urlStr.includes('/api/v1/auths/')) {
-        clone.text().then(t => {
-          try {
-            const entry = {url: urlStr, method: opts?.method || 'GET', body: opts?.body?.slice?.(0,2000) || opts?.body, resp: t.slice(0,5000), ts: Date.now()};
-            if (urlStr.includes('no8xfe') && (urlStr.includes('captcha-open') || opts?.body)) {
+      clone.text().then(t => {
+        window.__allFetch.push({url: urlStr, resp: t.slice(0,3000), status: resp.status, time: Date.now(), type: 'fetch_res'});
+        try {
+          const low = urlStr.toLowerCase();
+          // broad capture like direct_sweep
+          if (low.includes('captcha')||low.includes('verify')||low.includes('aliyun')||low.includes('sgp')||low.includes('no8xfe')||low.includes('csc')||low.includes('cf')||low.includes('aliyuncs')||low.includes('auths')) {
+            const entry = {url: urlStr, method: opts?.method||'GET', body: (opts?.body||'').toString().slice(0,2000), resp: t.slice(0,5000), ts: Date.now(), status: resp.status};
+            if (low.includes('no8xfe') && (low.includes('captcha-open') || opts?.body)) {
               window.__capInitCalls.push(entry);
-            } else if (urlStr.includes('verify') || urlStr.includes('Verify')) {
+            } else if (low.includes('verify') || t.includes('VerifyCode') || t.includes('VerifyResult') || t.includes('securityToken')) {
               window.__capVerifCalls.push(entry);
-            } else if (urlStr.includes('upload')) {
+              try { const j=JSON.parse(t); if(j.captcha_verify_param||j.VerifyCode||j.param||j.securityToken) window.__capParams.push(j); }catch(e){}
+            } else if (low.includes('upload')) {
               window.__capUploadCalls.push(entry);
-            } else if (urlStr.includes('/api/v1/auths/')) {
+            } else if (low.includes('/api/v1/auths/')) {
               window.__signupCalls.push(entry);
+            } else if (t.includes('VerifyCode')||t.includes('securityToken')) {
+              window.__capVerifCalls.push(entry);
             }
-            if (urlStr.includes('aliyuncs.com')) {
-              // Image URL observed
+            if (low.includes('aliyuncs.com')) {
               window.__capImages.push({url: urlStr, ts: Date.now()});
             }
-          } catch(e){}
-        }).catch(()=>{});
-      }
+          }
+        } catch(e){}
+      }).catch(()=>{});
       return resp;
     } catch(e) {
-      if (urlStr.includes('captcha') || urlStr.includes('no8xfe')) {
+      window.__allFetch.push({url: urlStr, error: e.message, time: Date.now(), type: 'fetch_err'});
+      if (urlStr.toLowerCase().includes('captcha') || urlStr.toLowerCase().includes('no8xfe')) {
         window.__capInitCalls.push({url: urlStr, error: e.message, ts: Date.now()});
       }
       throw e;
     }
   };
 
-  // Hook XHR
+  // Hook XHR - capture ALL
   const origOpen = XMLHttpRequest.prototype.open;
   const origSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.open = function(method, url, ...rest) {
     this._capMethod = method;
     this._capUrl = url;
+    this._allFetchUrl = url;
     return origOpen.call(this, method, url, ...rest);
   };
   XMLHttpRequest.prototype.send = function(body) {
     const method = this._capMethod;
-    const url = this._capUrl;
-    if (url && (url.includes('captcha') || url.includes('no8xfe') || url.includes('/api/v1/auths/'))) {
-      const xhr = this;
-      const origOnReady = xhr.onreadystatechange;
-      xhr.addEventListener('load', function() {
-        try {
-          const entry = {url, method, body: body?.slice?.(0,2000), resp: xhr.responseText?.slice(0,5000), status: xhr.status, ts: Date.now()};
-          if (url.includes('captcha-open') || url.includes('CertifyId') || body?.includes('SceneId')) {
+    const url = this._capUrl||'';
+    window.__allFetch.push({url: url, method: method, body: (body||'').toString().slice(0,1000), time: Date.now(), type: 'xhr_req'});
+    const xhr = this;
+    xhr.addEventListener('load', function() {
+      try {
+        window.__allFetch.push({url: url, resp: xhr.responseText.slice(0,3000), status: xhr.status, time: Date.now(), type: 'xhr_res'});
+        const low = (url||'').toLowerCase();
+        const resp = xhr.responseText||'';
+        if (low.includes('captcha')||low.includes('verify')||low.includes('aliyun')||low.includes('sgp')||low.includes('no8xfe')||resp.includes('VerifyCode')||resp.includes('securityToken')||low.includes('auths')) {
+          const entry = {url: url, method: method, body: (body||'').toString().slice(0,2000), resp: resp.slice(0,5000), status: xhr.status, ts: Date.now()};
+          if (low.includes('captcha-open') || low.includes('certifyid') || (body||'').toString().includes('SceneId')) {
             window.__capInitCalls.push(entry);
-          } else if (url.includes('verify') || url.includes('Verify')) {
+          } else if (low.includes('verify') || resp.includes('VerifyCode') || resp.includes('securityToken') || resp.includes('VerifyResult')) {
             window.__capVerifCalls.push(entry);
-          } else if (url.includes('/api/v1/auths/')) {
+            try { const j=JSON.parse(resp); if(j.captcha_verify_param||j.VerifyCode||j.param||j.securityToken) window.__capParams.push(j); }catch(e){}
+          } else if (low.includes('/api/v1/auths/')) {
             window.__signupCalls.push(entry);
+          } else if (resp.includes('VerifyCode')) {
+            window.__capVerifCalls.push(entry);
           }
-        } catch(e){}
-      });
-    }
+        }
+      } catch(e){}
+    });
     return origSend.call(this, body);
   };
 
@@ -263,9 +277,16 @@ def get_intercept_js() -> str:
         if (config && config.success) {
           const origSuccess = config.success;
           config.success = function(param) {
-            window.__capParams.push({param, ts: Date.now()});
+            window.__capParams.push({param: param, ts: Date.now(), from: 'success_hook'});
             console.log('[cap] success param captured, len', typeof param === 'string' ? param.length : JSON.stringify(param).length);
             return origSuccess.apply(this, arguments);
+          };
+        }
+        if (config && config.fail) {
+          const origFail = config.fail;
+          config.fail = function(e) {
+            window.__capVerifCalls.push({fail: e, ts: Date.now(), from: 'fail_hook'});
+            return origFail.apply(this, arguments);
           };
         }
         window.__capLastConfig = config;
@@ -278,7 +299,7 @@ def get_intercept_js() -> str:
   };
   if (!checkInit()) {
     const iv = setInterval(() => { if (checkInit()) clearInterval(iv); }, 200);
-    setTimeout(() => clearInterval(iv), 10000);
+    setTimeout(() => clearInterval(iv), 15000);
   }
 
   // Observe DOM for captcha images
@@ -286,7 +307,6 @@ def get_intercept_js() -> str:
     for (const m of muts) {
       for (const node of m.addedNodes) {
         if (node.nodeType === 1) {
-          // Look for img tags with aliyuncs
           const imgs = node.querySelectorAll ? node.querySelectorAll('img') : [];
           for (const img of imgs) {
             const src = img.src || '';
@@ -294,7 +314,6 @@ def get_intercept_js() -> str:
               window.__capImages.push({url: src.slice(0,2000), tag: 'img', ts: Date.now(), isData: src.startsWith('data:')});
             }
           }
-          // Also check for div with background image
           if (node.style && node.style.backgroundImage) {
             const bg = node.style.backgroundImage;
             if (bg.includes('aliyuncs.com') || bg.includes('data:image')) {
@@ -307,7 +326,7 @@ def get_intercept_js() -> str:
   });
   observer.observe(document.body, {childList: true, subtree: true});
 
-  return {hooked: true};
+  return {hooked: true, allFetchCount: window.__allFetch.length};
 })()
 """
 
