@@ -1744,13 +1744,16 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
             # slider_x sweep values that proved T001: direct_sweep 50,100,150,200,239,260 - ee0ad8a2 got T001 at 200->710
             broad_slider = [30, 60, 90, 120, 150, 170, 190, 200, 210, 230, 240, 250, 260]
             forced_include = {200, 210, 230, 260, 30, 60}  # proven T001 winners must always be tried
-            # Also add around best ±20,30 if not already covered
+            # Also add around best ±20,30 if not already covered + fine ±1-3 for small puzzle like 15->55 true (needed 55.06 vs detected 53.6 diff 1.4px)
+            # v0.3.12 fine sweep: previous 53.6 got F015, true 55 is +1.4, need ±1,2,3 to hit T001
             if best:
                 sx_best = puzzle_to_slider(float(best.x))
-                for delta in [-30, -20, -10, 10, 20, 30]:
+                # fine sweep first - critical for medium small puzzles (puzzle 15 slider 55)
+                for delta in [-3, -2, -1, 1, 2, 3, -10, 10, -20, 20, -30, 30]:
                     cand_sx = max(0, min(260, sx_best + delta))
-                    # avoid near dup <5 slider, but allow forced
-                    if cand_sx in forced_include or all(abs(cand_sx - existing[1]) >= 3 for existing in attempts):
+                    # avoid near dup <1 slider for fine, allow forced
+                    thresh = 1 if abs(delta) <= 3 else 2
+                    if cand_sx in forced_include or all(abs(cand_sx - existing[1]) >= thresh for existing in attempts):
                         # convert back to puzzle for logging
                         px = slider_to_puzzle(cand_sx)
                         attempts.append((px, cand_sx, best.candidates[0].mvar if best.candidates else 0))
@@ -1885,8 +1888,8 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
             status = status_res
             res = res_text
 
-        # Wait for verify
-        time.sleep(3.0)
+        # Wait for verify - v0.3.12 increased 3.0->4.5s for small puzzle 15 type where verify delayed + new challenge image load
+        time.sleep(4.5)
 
         # Check verify calls and params - v0.3.9 add allFetch for debugging F015/T001 capture
         status2, res2 = eval_js(session_id, """
