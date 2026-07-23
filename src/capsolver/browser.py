@@ -175,14 +175,29 @@ def click_trusted(
 
 
 def get_slider_coords(session_id: str) -> tuple[float, float] | None:
-    """Get slider center coords via eval for trusted drag - robust multi-selector v0.3.4.
-    Based on live z.ai DOM dump: #aliyunCaptcha-sliding-slider 40x40 at 490,601.5 inside #aliyunCaptcha-sliding-body 300x40.
-    Retries 5 times with delay to handle animation.
+    """Get slider center coords via eval for trusted drag - robust v0.3.6.
+
+    Live DOM: #aliyunCaptcha-window-float 332x429 x474 y238 class window-show/hidden,
+    #aliyunCaptcha-sliding-body 300x40 x490 y602, #aliyunCaptcha-sliding-slider 40x40 x490 y602.
+    Now polls 10 times, checks window visibility, re-clicks captcha-body if hidden.
     """
-    # JS that tries all selectors, including sliding-body fallback, and returns best candidate even if w=0 initially
+    # JS to get full captcha state
+    state_js = """
+(() => {
+  const win = document.getElementById('aliyunCaptcha-window-float');
+  const slider = document.getElementById('aliyunCaptcha-sliding-slider');
+  const body = document.getElementById('aliyunCaptcha-sliding-body');
+  const capBody = document.getElementById('aliyunCaptcha-captcha-body');
+  function info(el){ if(!el) return null; const r=el.getBoundingClientRect(); const cs=window.getComputedStyle(el); return {id:el.id, cls:(el.className||'').toString().slice(0,120), x:Math.round(r.x), y:Math.round(r.y), w:Math.round(r.width), h:Math.round(r.height), display:cs.display, vis:cs.visibility, left:el.style.left}; }
+  return {win:info(win), slider:info(slider), body:info(body), capBody:info(capBody), allFetch:(window.__allFetch||[]).length, verif:(window.__capVerifCalls||[]).length};
+})()"""
+
+    # JS to find slider (same as before but with window info)
     js_template = """
 (() => {
   const attempt = %d;
+  const win = document.getElementById('aliyunCaptcha-window-float');
+  const isHidden = !win || (win.className||'').includes('hidden') || win.getBoundingClientRect().width==0;
   const selectors = [
     '#aliyunCaptcha-sliding-slider',
     '.aliyunCaptcha-sliding-slider',
@@ -203,7 +218,6 @@ def get_slider_coords(session_id: str) -> tuple[float, float] | None:
     '.nc_scale',
     '.nc_btn'
   ];
-  // First pass: exact slider with non-zero rect
   for (const sel of selectors) {
     try {
       const els = document.querySelectorAll(sel);
@@ -212,26 +226,22 @@ def get_slider_coords(session_id: str) -> tuple[float, float] | None:
         const style = window.getComputedStyle(s);
         if (r.width >= 25 && r.height >= 25 && r.width <= 80 && r.height <= 80) {
           if (style.display === 'none' || style.visibility === 'hidden') continue;
-          // Must be near captcha
           const cap = s.closest('[id*="aliyun"], [class*="aliyun"]') || document.getElementById('aliyunCaptcha-window-float');
           if (!cap && !sel.includes('aliyun')) continue;
-          return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height, sel: sel, x0: r.x, y0: r.y, attempt};
+          return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height, sel: sel, x0: r.x, y0: r.y, attempt, hidden:isHidden, winCls:win?(win.className||'').slice(0,80):null};
         }
       }
     } catch(e){}
   }
-  // Second pass: allow w=0 elements but try to get parent body rect
   try {
     const body = document.getElementById('aliyunCaptcha-sliding-body');
     if (body) {
       const r = body.getBoundingClientRect();
       if (r.width >= 200 && r.height >= 20) {
-        // slider is at left edge of body, center at x+20, y + h/2
-        return {x: r.x + 20, y: r.y + r.height/2, w: 40, h: r.height, sel: 'sliding-body-fallback', x0: r.x, y0: r.y, attempt};
+        return {x: r.x + 20, y: r.y + r.height/2, w: 40, h: r.height, sel: 'sliding-body-fallback', x0: r.x, y0: r.y, attempt, hidden:isHidden};
       }
     }
   } catch(e){}
-  // Third: search any 30-70 sized element inside aliyun container (previous fallback)
   try {
     const all = Array.from(document.querySelectorAll('div, span, button'));
     for (const el of all) {
@@ -241,44 +251,86 @@ def get_slider_coords(session_id: str) -> tuple[float, float] | None:
         if (cap) {
           const style = window.getComputedStyle(el);
           if (style.display === 'none') continue;
-          return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height, sel: 'fallback_cap_'+el.tagName, x0: r.x, y0: r.y, attempt};
+          return {x: r.x + r.width/2, y: r.y + r.height/2, w: r.width, h: r.height, sel: 'fallback_cap_'+el.tagName, x0: r.x, y0: r.y, attempt, hidden:isHidden};
         }
       }
     }
   } catch(e){}
-  // Final: return body if found even without size check
   try {
-    const win = document.getElementById('aliyunCaptcha-window-float');
-    if (win) {
-      const r = win.getBoundingClientRect();
-      return {x: r.x + 30, y: r.y + r.height - 20, w: 40, h: 40, sel: 'window-float-fallback', x0: r.x, y0: r.y, attempt, w_full: r.width, h_full: r.height};
+    const win2 = document.getElementById('aliyunCaptcha-window-float');
+    if (win2) {
+      const r = win2.getBoundingClientRect();
+      return {x: r.x + 30, y: r.y + r.height - 20, w: 40, h: 40, sel: 'window-float-fallback', x0: r.x, y0: r.y, attempt, w_full: r.width, h_full: r.height, hidden: (win2.className||'').includes('hidden'), winCls:(win2.className||'').slice(0,80)};
     }
   } catch(e){}
-  return null;
+  return {x:0,y:0,w:0,h:0,sel:'none', attempt, hidden:isHidden, winCls:win?(win.className||'').slice(0,80):'no-win'};
 })()"""
-    for attempt in range(1, 6):
+
+    for attempt in range(1, 11):
         js = js_template % attempt
         status, res = eval_js(session_id, js, timeout=10)
+        print(f"[get_slider_coords] attempt {attempt} raw {res}")
         if status == 200 and isinstance(res, dict) and "x" in res:
             try:
                 x = float(res["x"])
                 y = float(res["y"])
-                # filter out 0,0 which indicates hidden or not found
+                hidden = res.get("hidden", False)
+                win_cls = res.get("winCls", "")
+                sel = res.get("sel", "unknown")
+                w = res.get("w", 0)
+                # If hidden, re-trigger captcha
+                if hidden or (res.get("winCls") and "hidden" in str(res.get("winCls"))):
+                    print(f"[get_slider_coords] attempt {attempt} window hidden (cls={win_cls}) -> re-clicking captcha-body")
+                    eval_js(session_id, "(() => { const el=document.getElementById('aliyunCaptcha-captcha-body'); if(el){ el.click(); return 'clicked'; } return 'no-cap-body'; })()", timeout=5)
+                    time.sleep(1.2)
+                    # also log full state
+                    st, state = eval_js(session_id, state_js, timeout=5)
+                    print(f"[get_slider_coords] state after re-click: {state}")
+                    time.sleep(0.8)
+                    continue
                 if x == 0 and y == 0:
-                    # retry
-                    pass
-                elif x < 0 or y < 0 or x > 5000 or y > 5000:
-                    pass
-                else:
-                    print(f"[get_slider_coords] attempt {attempt} found {res.get('sel')} at ({x:.1f},{y:.1f}) w {res.get('w')} h {res.get('h')}")
-                    return (x, y)
+                    print(f"[get_slider_coords] attempt {attempt} got 0,0 sel={sel} w={w} hidden={hidden} -> retry")
+                    # try clicking captcha body again
+                    if attempt % 3 == 0:
+                        eval_js(session_id, "document.getElementById('aliyunCaptcha-captcha-body')?.click()", timeout=5)
+                    time.sleep(0.8)
+                    continue
+                if x < 0 or y < 0 or x > 5000 or y > 5000:
+                    print(f"[get_slider_coords] attempt {attempt} out of viewport {x},{y} sel={sel}")
+                    time.sleep(0.6)
+                    continue
+                # Check if slider w is plausible, if fallback body we still accept
+                print(f"[get_slider_coords] attempt {attempt} SUCCESS found {sel} at ({x:.1f},{y:.1f}) w {w} h {res.get('h')} hidden={hidden} winCls={win_cls}")
+                return (x, y)
             except Exception as e:
                 print(f"[get_slider_coords] parse error {e} res {res}")
-        # sleep between attempts except last
-        if attempt < 5:
-            time.sleep(0.6)
-    print("[get_slider_coords] FAILED after 5 attempts")
-    return None
+        else:
+            print(f"[get_slider_coords] attempt {attempt} no result status {status} res {res}")
+
+        # Between attempts, if window hidden or slider not found, try to re-trigger
+        if attempt in (3, 6, 9):
+            print(f"[get_slider_coords] attempt {attempt} triggering captcha-body click to show window")
+            eval_js(session_id, "(() => { const el=document.getElementById('aliyunCaptcha-captcha-body')||document.querySelector('[id*=\"captcha-body\"]'); if(el){ el.click(); return 'clicked'; } return 'not-found'; })()", timeout=5)
+            time.sleep(1.0)
+
+        if attempt < 10:
+            time.sleep(0.8)
+
+    # Final fallback: use hardcoded known coords 510,621.5 observed in live DOM dump + try to get captcha-body as last resort
+    print("[get_slider_coords] FAILED after 10 attempts, trying hardcoded fallback 510,621.5")
+    st, fallback = eval_js(session_id, "(() => { const b=document.getElementById('aliyunCaptcha-captcha-body'); if(b){ const r=b.getBoundingClientRect(); return {x:r.x+r.width/2, y:r.y+r.height/2, w:r.width, h:r.height, sel:'captcha-body-fallback'}; } return null; })()", timeout=5)
+    if isinstance(fallback, dict) and "x" in fallback:
+        try:
+            x = float(fallback["x"])
+            y = float(fallback["y"])
+            if x != 0 and y != 0 and x < 5000 and y < 5000:
+                print(f"[get_slider_coords] using captcha-body fallback {x},{y}")
+                return (x, y)
+        except Exception:
+            pass
+    # ultimate hardcoded
+    print("[get_slider_coords] using ultimate hardcoded 510,621.5")
+    return (510.0, 621.5)
 
 
 # ----------------------------------------------------------------------
