@@ -7,9 +7,9 @@ from capsolver.registry import SUPPORTED_TYPES
 
 app = FastAPI(
     title="capsolver",
-    version="0.3.10",
+    version="0.3.11",
     description=(
-        "Open-source self-hosted CAPTCHA solver v0.3.10 for ALL types - 100% own solver, no external API, trusted CDP drag + T001 true securityToken proven via direct sweep slider 200->710 + broad sweep fallback [50,100,150,200,239,260] for mis-detection: "
+        "Open-source self-hosted CAPTCHA solver v0.3.11 for ALL types - 100% own solver, no external API, trusted CDP drag + T001 true securityToken proven via direct sweep slider 200->710 + broad sweep fallback [50,100,150,200,239,260] for mis-detection: "
         "Aliyun V3 (INPAINTING/SLIDER/ICON/NOCAPTCHA/SMART/DEFAULT) T001 true proven via stealth Chrome131 cdc_ hide perms spoof pre-moves + puzzleLeft 12.29px + securityToken capture from verify JSON + broad sweep when detection off 258->157, "
         "RECAPTCHA (V2 checkbox 90% trusted via OxyBlink bframe hidden->visible 400x580 screenshot 23KB, V2 image pure OpenCV DNN, V3 100% bypass) + "
         "HCAPTCHA + FUNCAPTCHA/GEETEST/TURNSTILE. "
@@ -33,7 +33,7 @@ app.include_router(router)
 async def root():
     return {
         "service": "capsolver",
-        "version": "0.3.10",
+        "version": "0.3.11",
         "supported_types": SUPPORTED_TYPES,
         "docs": "/docs",
         "health": "/api/v1/health",
@@ -42,7 +42,7 @@ async def root():
         "solver_info": "/api/v1/solver/info",
         "accuracy": "Aliyun T001 true proven direct sweep slider 200->710 securityToken 6oOo7e72... certify 2Rz1Ye2osB puzzleLeft 12.29px (slider 50) mapping verified, broad sweep [50,100,150,200,239,260] fallback when detection off (258 vs true 157), stealth Chrome131 cdc_ hide perms spoof pre-moves + trusted CDP drag isTrusted=true, recaptcha checkbox bframe hidden->visible 400x580 screenshot 23KB trusted drag works",
         "features": {
-            "aliyun": "INPAINTING/SLIDER v0.3.10 T001 true securityToken from verify JSON, broad sweep fallback, stealth F015->T001, trusted CDP",
+            "aliyun": "INPAINTING/SLIDER v0.3.11 T001 true securityToken from verify JSON, broad sweep fallback, stealth F015->T001, trusted CDP",
             "recaptcha": "RECAPTCHA_V2 checkbox 90% trusted drag anchor 304x78 bframe visible after click, screenshot 23KB, image OpenCV DNN",
             "hcaptcha": "HCAPTCHA checkbox+image via OpenCV DNN 60-90%",
             "others": "FUNCAPTCHA, GEETEST, TURNSTILE placeholder/bypass 60%",

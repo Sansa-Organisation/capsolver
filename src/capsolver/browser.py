@@ -1739,21 +1739,25 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
                 attempts.append((float(cand.x), sx, cand.mvar))
 
         # Broad sweep fallback always when sweep=True (proven needed: SID ee0ad8a2 true gap puzzle 157 slider 200 but detection 258)
+        # v0.3.11 FIX: previous filter >=8 removed 200 when around-best 195 existed, preventing T001. Now use >=3 and force-include proven winners.
         if sweep:
-            # slider_x sweep values that proved T001: direct_sweep 50,100,150,200,239,260
+            # slider_x sweep values that proved T001: direct_sweep 50,100,150,200,239,260 - ee0ad8a2 got T001 at 200->710
             broad_slider = [30, 60, 90, 120, 150, 170, 190, 200, 210, 230, 240, 250, 260]
+            forced_include = {200, 210, 230, 260, 30, 60}  # proven T001 winners must always be tried
             # Also add around best ±20,30 if not already covered
             if best:
                 sx_best = puzzle_to_slider(float(best.x))
                 for delta in [-30, -20, -10, 10, 20, 30]:
                     cand_sx = max(0, min(260, sx_best + delta))
-                    # avoid near dup <5 slider
-                    if all(abs(cand_sx - existing[1]) >= 5 for existing in attempts):
+                    # avoid near dup <5 slider, but allow forced
+                    if cand_sx in forced_include or all(abs(cand_sx - existing[1]) >= 3 for existing in attempts):
                         # convert back to puzzle for logging
                         px = slider_to_puzzle(cand_sx)
                         attempts.append((px, cand_sx, best.candidates[0].mvar if best.candidates else 0))
             for sx in broad_slider:
-                if all(abs(sx - existing[1]) >= 8 for existing in attempts):
+                # v0.3.11 fix: lower threshold 8->3 and force include winners even if close to around-best
+                is_forced = sx in forced_include
+                if is_forced or all(abs(sx - existing[1]) >= 3 for existing in attempts):
                     px = slider_to_puzzle(float(sx))
                     attempts.append((px, float(sx), best.candidates[0].mvar if best.candidates else 0))
                 if len(attempts) >= 15:
@@ -1761,8 +1765,9 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
     else:
         attempts.append((float(challenge.puzzle_x), challenge.slider_x, 0))
         if sweep:
-            for sx in [50, 100, 150, 200, 239, 260]:
-                if all(abs(sx - existing[1]) >= 8 for existing in attempts):
+            for sx in [30, 50, 60, 90, 100, 120, 150, 170, 190, 200, 210, 230, 239, 240, 250, 260]:
+                # v0.3.11 fix: force include 200,210,230,260 proven T001
+                if sx in {200, 210, 230, 260, 30, 60} or all(abs(sx - existing[1]) >= 3 for existing in attempts):
                     attempts.append((slider_to_puzzle(float(sx)), float(sx), 0))
 
     for attempt_idx, (puzzle_x, slider_x, mvar) in enumerate(attempts):
