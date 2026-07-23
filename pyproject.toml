@@ -1,7 +1,7 @@
 [project]
 name = "capsolver"
-version = "0.3.8"
-description = "self-hosted capsolver microservice v0.3.8 - T001 true securityToken proven direct sweep slider 200->710 puzzleLeft 12.29px + broad sweep fallback [50,100,150,200,239,260] when detection off 258 vs true 157 + stealth Chrome131 cdc_ hide perms spoof + trusted CDP drag isTrusted=true F015->T001 + recaptcha bframe hidden->visible 400x580 screenshot 23KB"
+version = "0.3.9"
+description = "self-hosted capsolver microservice v0.3.9 - T001 true securityToken proven direct sweep slider 200->710 puzzleLeft 12.29px + broad sweep fallback [50,100,150,200,239,260] when detection off 258 vs true 157 + stealth Chrome131 cdc_ hide perms spoof + trusted CDP drag isTrusted=true F015->T001 + recaptcha bframe hidden->visible 400x580 screenshot 23KB"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",

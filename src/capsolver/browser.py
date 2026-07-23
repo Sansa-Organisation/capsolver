@@ -1883,14 +1883,17 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
         # Wait for verify
         time.sleep(3.0)
 
-        # Check verify calls and params
+        # Check verify calls and params - v0.3.9 add allFetch for debugging F015/T001 capture
         status2, res2 = eval_js(session_id, """
 (() => {
   return {
-    verif: (window.__capVerifCalls||[]).slice(-3),
+    verif: (window.__capVerifCalls||[]).slice(-5),
     params: (window.__capParams||[]).slice(-3),
     signup: (window.__signupCalls||[]).slice(-3),
     images: (window.__capImages||[]).slice(-5),
+    allFetch: (window.__allFetch||[]).slice(-15),
+    allCount: (window.__allFetch||[]).length,
+    verifCount: (window.__capVerifCalls||[]).length,
     puzzleStyle: (()=>{ try { const el=document.querySelector('#aliyunCaptcha-puzzle')||document.querySelector('[class*="puzzle"]'); return el?el.style.left:null;}catch(e){return null}})(),
     captchaVisible: !!document.querySelector('#aliyunCaptcha-captcha-body, .aliyunCaptcha, [class*="captcha"]'),
     pageHtml: document.body.innerHTML.slice(0,3000)
@@ -1902,12 +1905,22 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
         if status2 == 200 and isinstance(res2, dict):
             verif = res2.get("verif", [])
             params = res2.get("params", [])
-            print(f"  verif calls: {len(verif)} params: {len(params)} visible: {res2.get('captchaVisible')}")
-            # NEW v0.3.7: try to extract securityToken directly from verify response (SID ee0ad8a2 case)
+            all_fetch = res2.get("allFetch", [])
+            print(f"  verif calls: {len(verif)} allFetch: {len(all_fetch)} allCount: {res2.get('allCount')} verifCount: {res2.get('verifCount')} params: {len(params)} visible: {res2.get('captchaVisible')} puzzleStyle: {res2.get('puzzleStyle')}")
+            # Debug dump allFetch last entries for F015/T001
+            for af in all_fetch[-5:]:
+                try:
+                    print(f"    allFetch: {str(af)[:500]}")
+                except:
+                    pass
+            # NEW v0.3.8/0.3.9: also check allFetch for VerifyCode if verif empty
+            if len(verif) == 0 and len(all_fetch) > 0:
+                print("  verif empty, checking allFetch for VerifyCode...")
+                verif = all_fetch  # fallback to allFetch for parsing
             security_token_from_verif = None
             certify_from_verif = None
             verify_code_from_verif = None
-            for v in verif[-3:]:
+            for v in verif[-10:]:
                 try:
                     resp_str = ""
                     if isinstance(v, dict):
