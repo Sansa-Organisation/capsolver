@@ -1707,12 +1707,14 @@ def extract_and_solve(session_id: str, save_dir: Optional[str] = None) -> Option
     )
 
 
-def solve_captcha_in_session(session_id: str, max_retries: int = 3, sweep: bool = False) -> Tuple[bool, Optional[str], dict]:
+def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool = True) -> Tuple[bool, Optional[str], dict]:
     """
-    Solve with scene classification BEFORE first try - no sweep needed for 80% target.
-    Uses refined sub-pixel position and scene type (white_wall/dark/textured) to pick best first try.
+    Solve with scene classification + broad sweep fallback - v0.3.7.
+    Direct sweep SID ee0ad8a2 proved T001 true for slider 200 even though detection gave 258 conf 0.99.
+    So detection can be off by 60px slider => need sweep [50,100,150,200,239,260] like direct_sweep.py.
 
-    Sweep disabled by default. Enable only for low-confidence fallback.
+    Sweep enabled by default, candidates first then broad sweep retries.
+    Captures securityToken from verify response as fallback when success hook misses.
     """
     info: Dict[str, Any] = {"attempts": []}
 
@@ -1720,36 +1722,48 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 3, sweep: bool 
     if not challenge:
         return False, None, {"error": "extract failed"}
 
-    # Scene classification already done in solver - use refined position for first-try accuracy
+    # Scene classification + refined position for first-try
     attempts: List[Tuple[float, float, float]] = []  # (puzzle_x refined, slider_x, mvar)
 
+    best = challenge.detection if hasattr(challenge, 'detection') else None
+
     if hasattr(challenge.detection, "candidates") and challenge.detection.candidates:
-        # First try: refined sub-pixel position from scene-classified best
         best = challenge.detection
         px_refined = getattr(best, 'x_refined', float(best.x))
         sx_refined = puzzle_to_slider(float(px_refined))
         attempts.append((px_refined, sx_refined, best.candidates[0].mvar if best.candidates else 0))
 
-        # Add top distinct candidates as retries (not sweep)
         for cand in best.candidates[1:max_retries]:
-            # Avoid near-duplicates (<3px from already attempted)
             if all(abs(cand.x - existing[0]) >= 3 for existing in attempts):
                 sx = puzzle_to_slider(float(cand.x))
                 attempts.append((float(cand.x), sx, cand.mvar))
 
-        # Optional sweep only if low confidence and explicitly enabled
-        if sweep and best.confidence < 0.3:
-            best_x = best.x
-            for delta in [4, -4, 7, -7]:
-                px = float(best_x + delta)
-                if 0 <= px <= 300 - best.debug.get("W_puz", 20):
-                    if all(abs(px - existing[0]) >= 2 for existing in attempts):
-                        sx = puzzle_to_slider(float(px))
-                        attempts.append((px, sx, best.candidates[0].mvar if best.candidates else 0))
-                        if len(attempts) >= 7:
-                            break
+        # Broad sweep fallback always when sweep=True (proven needed: SID ee0ad8a2 true gap puzzle 157 slider 200 but detection 258)
+        if sweep:
+            # slider_x sweep values that proved T001: direct_sweep 50,100,150,200,239,260
+            broad_slider = [30, 60, 90, 120, 150, 170, 190, 200, 210, 230, 240, 250, 260]
+            # Also add around best ±20,30 if not already covered
+            if best:
+                sx_best = puzzle_to_slider(float(best.x))
+                for delta in [-30, -20, -10, 10, 20, 30]:
+                    cand_sx = max(0, min(260, sx_best + delta))
+                    # avoid near dup <5 slider
+                    if all(abs(cand_sx - existing[1]) >= 5 for existing in attempts):
+                        # convert back to puzzle for logging
+                        px = slider_to_puzzle(cand_sx)
+                        attempts.append((px, cand_sx, best.candidates[0].mvar if best.candidates else 0))
+            for sx in broad_slider:
+                if all(abs(sx - existing[1]) >= 8 for existing in attempts):
+                    px = slider_to_puzzle(float(sx))
+                    attempts.append((px, float(sx), best.candidates[0].mvar if best.candidates else 0))
+                if len(attempts) >= 15:
+                    break
     else:
         attempts.append((float(challenge.puzzle_x), challenge.slider_x, 0))
+        if sweep:
+            for sx in [50, 100, 150, 200, 239, 260]:
+                if all(abs(sx - existing[1]) >= 8 for existing in attempts):
+                    attempts.append((slider_to_puzzle(float(sx)), float(sx), 0))
 
     for attempt_idx, (puzzle_x, slider_x, mvar) in enumerate(attempts):
         print(f"\n[attempt {attempt_idx+1}/{len(attempts)}] puzzle_x={puzzle_x} slider_x={slider_x:.2f} mvar={mvar:.1f}")
@@ -1889,24 +1903,63 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 3, sweep: bool 
             verif = res2.get("verif", [])
             params = res2.get("params", [])
             print(f"  verif calls: {len(verif)} params: {len(params)} visible: {res2.get('captchaVisible')}")
+            # NEW v0.3.7: try to extract securityToken directly from verify response (SID ee0ad8a2 case)
+            security_token_from_verif = None
+            certify_from_verif = None
+            verify_code_from_verif = None
+            for v in verif[-3:]:
+                try:
+                    resp_str = ""
+                    if isinstance(v, dict):
+                        resp_str = v.get("resp", "") or v.get("body", "") or str(v)
+                    else:
+                        resp_str = str(v)
+                    # try parse json substring containing VerifyCode
+                    # Look for VerifyCode pattern
+                    import re as _re
+                    m_code = _re.search(r'"VerifyCode"\s*:\s*"([^"]+)"', resp_str)
+                    if m_code:
+                        verify_code_from_verif = m_code.group(1)
+                    m_token = _re.search(r'"securityToken"\s*:\s*"([^"]+)"', resp_str)
+                    if m_token:
+                        security_token_from_verif = m_token.group(1)
+                    m_cert = _re.search(r'"certifyId"\s*:\s*"([^"]+)"', resp_str)
+                    if m_cert:
+                        certify_from_verif = m_cert.group(1)
+                    # Also check VerifyResult true
+                    if '"VerifyResult":true' in resp_str or "'VerifyResult':true" in resp_str or '"VerifyResult": true' in resp_str:
+                        # success!
+                        if security_token_from_verif:
+                            print(f"  -> SUCCESS verif true token {security_token_from_verif[:60]} code {verify_code_from_verif} certify {certify_from_verif}")
+                            return True, security_token_from_verif, {"attempt": attempt_idx+1, "puzzle_x": puzzle_x, "slider_x": slider_x, "verif": verif, "verify_code": verify_code_from_verif or "T001", "certifyId": certify_from_verif, "securityToken": security_token_from_verif}
+                except Exception as _e:
+                    print(f"  verif parse error {_e}")
+
             for v in verif[-2:]:
-                txt = str(v)[:800]
-                print(f"    verif: {txt}")
-                # Look for VerifyCode
-                if "F000" in txt or "Success" in txt or '"VerifyResult":true' in txt or "'VerifyResult':true" in txt:
-                    print("  -> SUCCESS detected in verify!")
-                    # Get param
+                txt = str(v)[:2000]
+                print(f"    verif: {txt[:800]}")
+                # Look for VerifyCode success including T001 (SID ee0ad8a2)
+                if "F000" in txt or "T001" in txt or "Success" in txt or '"VerifyResult":true' in txt or "'VerifyResult':true" in txt or '"VerifyResult": true' in txt:
+                    # If we already have security token, use it
+                    if security_token_from_verif:
+                        print(f"  -> SUCCESS detected in verify! code {verify_code_from_verif} token present")
+                        return True, security_token_from_verif, {"attempt": attempt_idx+1, "puzzle_x": puzzle_x, "slider_x": slider_x, "verif": verif, "verify_code": verify_code_from_verif, "securityToken": security_token_from_verif}
+                    # fallback to params hook
                     captcha_param = params[-1]["param"] if params else None
                     if captcha_param:
-                        # param may be object or string
                         if isinstance(captcha_param, dict):
-                            cp = captcha_param.get("param") or captcha_param.get("captcha_verify_param") or json.dumps(captcha_param)
+                            cp = captcha_param.get("param") or captcha_param.get("captcha_verify_param") or captcha_param.get("securityToken") or json.dumps(captcha_param)
                         else:
                             cp = str(captcha_param)
-                        return True, cp, {"attempt": attempt_idx+1, "puzzle_x": puzzle_x, "slider_x": slider_x, "verif": verif}
+                        print(f"  -> SUCCESS via params hook token {str(cp)[:80]}")
+                        return True, cp, {"attempt": attempt_idx+1, "puzzle_x": puzzle_x, "slider_x": slider_x, "verif": verif, "verify_code": verify_code_from_verif}
+
+            if security_token_from_verif:
+                # Verif true even if code not F000? Use token anyway if present and VerifyResult true was earlier
+                print(f"  -> Got securityToken via verif {security_token_from_verif[:60]}")
+                return True, security_token_from_verif, {"attempt": attempt_idx+1, "puzzle_x": puzzle_x, "slider_x": slider_x, "verify_code": verify_code_from_verif, "securityToken": security_token_from_verif}
 
             if params:
-                # Success even if verify text not containing F000? Check param exists
                 last_param = params[-1]
                 p = last_param.get("param")
                 if p:
@@ -1915,9 +1968,7 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 3, sweep: bool 
 
             # Check if captcha disappeared (implies success)
             if not res2.get("captchaVisible"):
-                # Might be success but param not captured via hook? Try to get from page
                 print("  captcha not visible, maybe success - checking for signup continuation")
-                # Wait a bit more
                 time.sleep(1)
                 status3, res3 = eval_js(session_id, "window.__capParams ? window.__capParams.slice(-1) : []", timeout=10)
                 if status3 == 200 and res3:
@@ -1925,6 +1976,15 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 3, sweep: bool 
                     if res3 and len(res3) > 0:
                         p = res3[0].get("param") if isinstance(res3[0], dict) else res3[0]
                         return True, str(p), {"attempt": attempt_idx+1, "late": True}
+                # Also check late verif for token
+                status4, res4 = eval_js(session_id, "(window.__capVerifCalls||[]).slice(-1)", timeout=10)
+                if status4 == 200 and res4:
+                    txt = str(res4)
+                    import re as _re2
+                    m_tok = _re2.search(r'"securityToken"\s*:\s*"([^"]+)"', txt)
+                    if m_tok:
+                        print(f"  late verif token {m_tok.group(1)[:60]}")
+                        return True, m_tok.group(1), {"attempt": attempt_idx+1, "late": True, "securityToken": m_tok.group(1)}
 
             # Record attempt info
             info["attempts"].append({
