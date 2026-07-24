@@ -98,7 +98,7 @@ def oxy_request(method: str, path: str, body: Any = None, timeout: int = 30) -> 
         return 0, str(e)
 
 
-def create_session(use_proxy: bool = True, proxy_country: str = "US", tier: str = "full") -> Optional[str]:
+def create_session(use_proxy: bool = True, proxy_country: str = "SE", tier: str = "full") -> Optional[str]:
     status, txt = oxy_request("POST", "/api/v1/sessions", {"tier": tier, "use_proxy": use_proxy, "proxy_country": proxy_country})
     if status in (200, 201):
         try:
