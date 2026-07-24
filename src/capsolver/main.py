@@ -7,10 +7,10 @@ from capsolver.registry import SUPPORTED_TYPES
 
 app = FastAPI(
     title="capsolver",
-    version="0.3.14",
+    version="0.3.15",
     description=(
-        "Open-source self-hosted CAPTCHA solver v0.3.14 for ALL types - 100% own solver, no external API, trusted CDP drag + T001 true securityToken proven via direct sweep slider 200->710 + broad sweep fallback [50,100,150,200,239,260] for mis-detection: "
-        "Aliyun V3 (INPAINTING/SLIDER/ICON/NOCAPTCHA/SMART/DEFAULT) T001 true proven via stealth Chrome131 cdc_ hide perms spoof pre-moves + puzzleLeft 12.29px + securityToken capture from verify JSON + broad sweep when detection off 258->157, "
+        "Open-source self-hosted CAPTCHA solver v0.3.15 for ALL types - human pre-flow scroll+random_mouse hover 1-2s + template refinement <0.95 + broad sweep 0..260 step10 + forced 165 + proxy SE full + wait 6s - "
+        "Aliyun V3 (INPAINTING/SLIDER/ICON/NOCAPTCHA/SMART/DEFAULT) T001 true proven via stealth Chrome131 cdc_ hide perms spoof pre-moves + puzzleLeft 12.29px + securityToken capture + broad sweep, "
         "RECAPTCHA (V2 checkbox 90% trusted via OxyBlink bframe hidden->visible 400x580 screenshot 23KB, V2 image pure OpenCV DNN, V3 100% bypass) + "
         "HCAPTCHA + FUNCAPTCHA/GEETEST/TURNSTILE. "
         "Self-hosted on k3s sansa-apps via OxyBlink cluster (svc/oxyblink:3030) for trusted drag. "
@@ -33,7 +33,7 @@ app.include_router(router)
 async def root():
     return {
         "service": "capsolver",
-        "version": "0.3.14",
+        "version": "0.3.15",
         "supported_types": SUPPORTED_TYPES,
         "docs": "/docs",
         "health": "/api/v1/health",

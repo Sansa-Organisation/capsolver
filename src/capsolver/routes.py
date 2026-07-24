@@ -71,6 +71,8 @@ def _url_to_image(url: str) -> Image.Image:
         return Image.open(io.BytesIO(resp.read()))
 
 
+__version__ = "0.3.15"
+
 def _pil_to_np_rgba(img: Image.Image) -> np.ndarray:
     if img.mode == "RGBA":
         return np.array(img)
@@ -364,7 +366,7 @@ def _solve_images_all_types(
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "service": "capsolver", "version": "0.3.14", "supported_types": SUPPORTED_TYPES}
+    return {"status": "ok", "service": "capsolver", "version": "0.3.15", "supported_types": SUPPORTED_TYPES}
 
 
 @router.get("/types", response_model=TypesResponse)
@@ -501,9 +503,9 @@ async def solve_upload(
 
 @router.get("/solver/info")
 async def solver_info():
-    """Explain all captcha types and solver strategies v0.3.14."""
+    """Explain all captcha types and solver strategies v0.3.15."""
     return {
-        "version": "0.3.14",
+        "version": "0.3.15",
         "supported_types": SUPPORTED_TYPES,
         "aliases": TYPE_ALIASES,
         "captcha_types": {
