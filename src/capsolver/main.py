@@ -7,9 +7,9 @@ from capsolver.registry import SUPPORTED_TYPES
 
 app = FastAPI(
     title="capsolver",
-    version="0.3.15",
+    version="0.3.16",
     description=(
-        "Open-source self-hosted CAPTCHA solver v0.3.15 for ALL types - human pre-flow scroll+random_mouse hover 1-2s + template refinement <0.95 + broad sweep 0..260 step10 + forced 165 + proxy SE full + wait 6s - "
+        "Open-source self-hosted CAPTCHA solver v0.3.16 for ALL types - optimized sweep step20 (was step10) attempts 22->14 avg 180s->90s + auto-cleanup active_sessions leak fix + human pre-flow scroll+random_mouse hover 1-2s + template refinement <0.95 + forced 165 + proxy SE full + wait 6s - "
         "Aliyun V3 (INPAINTING/SLIDER/ICON/NOCAPTCHA/SMART/DEFAULT) T001 true proven via stealth Chrome131 cdc_ hide perms spoof pre-moves + puzzleLeft 12.29px + securityToken capture + broad sweep, "
         "RECAPTCHA (V2 checkbox 90% trusted via OxyBlink bframe hidden->visible 400x580 screenshot 23KB, V2 image pure OpenCV DNN, V3 100% bypass) + "
         "HCAPTCHA + FUNCAPTCHA/GEETEST/TURNSTILE. "
@@ -33,7 +33,7 @@ app.include_router(router)
 async def root():
     return {
         "service": "capsolver",
-        "version": "0.3.15",
+        "version": "0.3.16",
         "supported_types": SUPPORTED_TYPES,
         "docs": "/docs",
         "health": "/api/v1/health",

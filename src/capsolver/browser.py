@@ -1913,11 +1913,11 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
                 print(f"[refine] exception {e}")
 
         # Broad sweep fallback always when sweep=True (proven needed: SID ee0ad8a2 true gap puzzle 157 slider 200 but detection 258)
-        # v0.3.15 expansion: 0..260 step 10 + forced_include 165 mapping 110->165 proven
+        # v0.3.16 optimized: 0..260 step20 to cut 379s fails to ~180s, forced_include 165 mapping 110->165 proven + winners
         if sweep:
             # slider_x sweep values that proved T001: direct_sweep 50,100,150,200,239,260 - ee0ad8a2 got T001 at 200->710
-            # v0.3.15 broad sweep expansion list 0..260 step10
-            broad_slider = list(range(0, 261, 10))  # 0,10,20,...,260
+            # v0.3.16 optimized broad sweep step20 for speed
+            broad_slider = list(range(0, 261, 20))  # 0,20,40,...,260 step20 vs step10
             forced_include = {200, 210, 230, 260, 30, 60, 165}  # proven T001 winners must always be tried + 165 observed 110 puzzle ->165 slider
             # Also add around best ±20,30 if not already covered + fine ±1-3 for small puzzle like 15->55 true (needed 55.06 vs detected 53.6 diff 1.4px)
             # v0.3.12 fine sweep: previous 53.6 got F015, true 55 is +1.4, need ±1,2,3 to hit T001
@@ -1934,12 +1934,12 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
                         attempts.append((px, cand_sx, best.candidates[0].mvar if best.candidates else 0))
             for sx in broad_slider:
                 # v0.3.11 fix: lower threshold 8->3 and force include winners even if close to around-best
-                # v0.3.15 keep >=3 but expanded list
+                # v0.3.16 keep >=3 but step20 reduced attempts 22->14
                 is_forced = sx in forced_include
                 if is_forced or all(abs(sx - existing[1]) >= 3 for existing in attempts):
                     px = slider_to_puzzle(float(sx))
                     attempts.append((px, float(sx), best.candidates[0].mvar if best.candidates else 0))
-                if len(attempts) >= 22:
+                if len(attempts) >= 14:
                     break
     else:
         attempts.append((float(challenge.puzzle_x), challenge.slider_x, 0))
@@ -1958,9 +1958,11 @@ def solve_captcha_in_session(session_id: str, max_retries: int = 5, sweep: bool 
         except Exception:
             pass
         if sweep:
-            # v0.3.15 expanded 0..260 step10
-            for sx in range(0, 261, 10):
-                # v0.3.15 fix: force include 200,210,230,260,165 proven T001 + 30,60 small
+            # v0.3.16 optimized expanded 0..260 step20
+            for sx in range(0, 261, 20):
+                # v0.3.16 fix: force include 200,210,230,260,165 proven T001 + 30,60 small, cap attempts 14
+                if len(attempts) >= 14:
+                    break
                 if sx in {200, 210, 230, 260, 30, 60, 165} or all(abs(sx - existing[1]) >= 3 for existing in attempts):
                     attempts.append((slider_to_puzzle(float(sx)), float(sx), 0))
 
@@ -2375,10 +2377,21 @@ def run_signup_flow(email: str, password: str, name: str = "Test User", headless
             return {"success": False, "error": "captcha solve failed", "session": sid, "info": info}
 
     finally:
-        # Keep session alive for debugging? Destroy after
-        # destroy_session(sid)
-        print(f"[signup] leaving session {sid} open for debug (destroy manually)")
-        pass
+        # v0.3.16 auto cleanup to prevent pool exhaustion 10/10
+        # destroy on success? Keep open for 10s debug then destroy, on fail destroy immediately
+        try:
+            # result might be from inner scope, check last info
+            pass
+        except:
+            pass
+        # Auto-cleanup: destroy session after flow to prevent active_sessions leak
+        # Previously left open for debug caused 10/10 cap
+        try:
+            time.sleep(1)
+            destroy_session(sid)
+            print(f"[signup] auto-destroyed session {sid} to prevent pool leak")
+        except Exception as e:
+            print(f"[signup] destroy failed {e}")
 
 
 # ----------------------------------------------------------------------

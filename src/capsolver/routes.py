@@ -70,8 +70,8 @@ def _url_to_image(url: str) -> Image.Image:
     with urllib.request.urlopen(req, timeout=15) as resp:
         return Image.open(io.BytesIO(resp.read()))
 
+__version__ = "0.3.16"
 
-__version__ = "0.3.15"
 
 def _pil_to_np_rgba(img: Image.Image) -> np.ndarray:
     if img.mode == "RGBA":
@@ -366,7 +366,7 @@ def _solve_images_all_types(
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "service": "capsolver", "version": "0.3.15", "supported_types": SUPPORTED_TYPES}
+    return {"status": "ok", "service": "capsolver", "version": "0.3.16", "supported_types": SUPPORTED_TYPES}
 
 
 @router.get("/types", response_model=TypesResponse)

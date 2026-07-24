@@ -1,7 +1,7 @@
 [project]
 name = "capsolver"
-version = "0.3.15"
-description = "self-hosted capsolver microservice v0.3.15 - human pre-flow scroll+random_mouse+hover 1-2s + broad sweep 0..260 step10 + template refinement <0.95 + forced 165 mapping 110->165 + proxy SE full tier + wait 6s for verify capture"
+version = "0.3.16"
+description = "self-hosted capsolver microservice v0.3.16 - optimized sweep step20 14 attempts vs 22 + auto-cleanup pool leak fix + human pre-flow scroll+random_mouse hover 1-2s + template refine + forced 165 + SE proxy"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
